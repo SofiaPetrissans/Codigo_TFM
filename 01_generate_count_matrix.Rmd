@@ -1,0 +1,63 @@
+---
+title: "01_generate_count_matrix"
+author: "Petrissans Moll, Sofia"
+date: "2024-10-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Info: https://satijalab.org/seurat/articles/pbmc3k_tutorial#perform-linear-dimensional-reduction
+
+![flujo_de_trabajo](flujo_de_trabajo.png)
+
+Cargamos las librerias
+
+```{r}
+library(dplyr)
+library(Seurat)
+packageVersion("Seurat")
+library(patchwork)
+```
+
+# Configurar el objeto Seurat
+
+Comenzamos **leyendo los datos**. La función `Read10X()`lee la salida del pipeline de cellranger de 10X Genomis y devuelve una matriz de recuento de moléculas identificadas de forma única (UMI).
+
+Los valores de esta **matriz de recuento** representan la cantidad de moléculas para cada característica (es decir, gen: fila) que se detectan en cada célula (columna).
+
+```{r}
+pbmc.data <- Read10X(data.dir = "C:/Users/sofia/Desktop/Master UOC/Tercer cuatri/TFM/scRNA_seq/scripts_seurat/filtered_gene_bc_matrices/hg19")
+```
+
+A continuación, utilizamos la matriz de recuento para crear un **Seuratobjeto**. El objeto funciona como un contenedor que contiene tanto datos (como la matriz de recuento) como análisis (como PCA o resultados de agrupamiento) para un conjunto de datos de una sola celda.
+
+El objeto Seurat contiene: datos de conteo, metadatos de las células y otros resultados de análisis.
+
+Argumentos:
+
+  -  `counts`: se utiliza para proporcionar la matriz de conteo que se acaba de leer con `Read10X()`.
+  
+  -  `project`: permite no mbrar el proyecto. Lo que facilita la identificación del objeto en el futuro.
+  
+  -  `min.cells`: especifica el número mínimo de células en las que debe aparecer un gen para ser incluido en el objeto Seurat. Por ejemplo, debe ser detectando en al menos 3 células para ser considerado. Esto evita el ruido.
+  
+  -  `min.features`: establece el número mínimo de genes (o características) que deben ser detectados en una célula para que esta sea incluida. Por ejemplo, solo se incluirán las células que tienen al menos 200 genes detectados. Esto ayuda a eliminar células que pueden tener baja calidad o no tienen suficiente información.
+
+```{r}
+pbmc <- CreateSeuratObject(counts = pbmc.data, proyect = "pbmc3k", min.cells = 3, min.features = 200)
+
+pbmc
+```
+
+La salida indica que hay 13.714 genes y 2700 células; que hay 1 tipo de análisis realizado en el objeto; el análisis activo es de tipo RNA y no se han definido caracterísitcas variables; '1 layer present: counts' indica que hay una capa de datos de conteo presente en el objeto. 
+
+
+
+
+
+
+
+

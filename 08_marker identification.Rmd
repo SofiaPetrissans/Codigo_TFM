@@ -1,0 +1,186 @@
+---
+title: "08_marker_identification"
+author: "Petrissans Moll, Sofia"
+date: "2024-10-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+########################################################################################################
+
+Encontrar características expresadas de manera diferencial (biomarcadores de grupo)
+
+########################################################################################################
+
+Esto es importante porque ayuda a encontrar genes que están asociados con ciertos tipos celulares o condiciones, basados en las diferencias en los perfiles de expresión génica.
+
+La función `FindMarkers()` permite encontrar genes (marcadores) que se expresan diferencialmente entre células de un grupo específico comparadas con otras células. 
+Por ejemplo, puede ayudarte a identificar genes que están sobreexpresados o subexpresados en un clúster de interés en comparación con otros clústeres o con todas las demás células.
+
+```{r}
+# Buscar marcadores de expresión diferencial en el clúster 2
+cluster2.markers <- FindMarkers(pbmc, ident.1 = 2)
+head(cluster2.markers, n = 5)
+```
+
+En este ejemplo, la función busca genes que están diferencialmente expresados en el clúster 2 comparado con el resto de las células. La salida contiene varias columnas importantes:
+
+  -  p_val: Valor p que indica la significancia estadística del diferencial de expresión del gen.
+
+  -  avg_log2FC: El cambio logarítmico (log2 fold change) en la expresión génica entre el grupo de interés y el grupo de comparación.
+
+  -  pct.1 y pct.2: El porcentaje de células en los grupos 1 y 2 que expresan ese gen.
+
+  -  p_val_adj: Valor p ajustado para tener en cuenta las pruebas múltiples
+
+
+También se pueden **comparar clústeres entre sí** para identificar marcadores diferenciales. Por ejemplo, para comparar el clúster 5 con los clústeres 0 y 3:
+
+```{r}
+cluster5.markers <- FindMarkers(pbmc, ident.1 = 5, ident.2 = c(0, 3))
+head(cluster5.markers, n = 5)
+```
+
+En este caso, se identifican genes que distinguen al clúster 5 de los clústeres 0 y 3.
+
+
+La función `FindAllMarkers()` realiza automáticamente el análisis de expresión diferencial **para todos los clústeres de manera simultáne**. Se pueden añadir varios parámetros adicionales para refinar los resultados, como:
+
+  -  `min.pct`: Filtra los genes que se expresan en menos de cierto porcentaje de células en un clúster. El valor predeterminado es 0.1.
+  
+  -  `min.diff.pct`: Diferencia porcentual mínima entre el porcentaje de células que expresan el gen en el grupo y el porcentaje de células que expresan el gen en todos los demás grupos combinados.
+  
+  -  `logfc.threshold`: Define el valor mínimo de cambio logarítmico en la expresión génica para que un gen sea considerado diferencial. El valor predeterminado es 0.25.
+
+
+El siguiente ejemplo encuentra marcadores positivos para todos los clústeres. En este caso se muestran solo los genes con un cambio logarítmico positivo superior a 1, lo que significa que esos genes están sobreexpresados en sus clústeres correspondientes.
+
+```{r}
+pbmc.markers <- FindAllMarkers(pbmc, only.pos = TRUE)
+pbmc.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1)
+
+```
+
+Por ejemplo, si busco los dos primeros genes que me aperecen en la lista que se encuentran sobreexpresados, en este caso, en el cluser 0. Se puede ver en el gráfico como se colorean sobretodo células de ese cluster. 
+
+```{r}
+FeaturePlot(pbmc, 
+            reduction = "umap", 
+            features = c("LDH8", "CCR7"), 
+            sort.cell = TRUE,
+            min.cutoff = 'q10', 
+            label = TRUE)
+```
+
+
+Seurat ofrece un **test de expresión diferencial**. Uno de ellos es el test ROC (curva característica operativa) que calcula el "poder de clasificación" de un gen, es decir, qué tan bien puede diferenciar las células de dos clústeres.
+
+```{r}
+cluster0.markers <- FindMarkers(pbmc, ident.1 = 0, logfc.threshold = 0.25, test.use = "roc", only.pos = TRUE)
+```
+
+Incluye varias herramientas para **visualizar la expresión de marcadores**. 
+
+  -  `VlnPlot()`: muestra distribuciones de probabilidad de expresión en los grupos.
+
+En este ejemplo, se visualiza la expresión de los genes MS4A1 y CD79A en los distintos clústeres. Esto podría ser útil si, por ejemplo, quieres verificar si estos genes están específicamente expresados en un tipo particular de células.
+
+```{r}
+VlnPlot(pbmc, features = c("MS4A1", "CD79A"))
+```
+
+
+Además, puedes personalizar los gráficos para mostrar los cuentas brutas (raw counts) de los genes en lugar de la expresión normalizada, y también puedes aplicar una transformación logarítmica. Este comando muestra los cuentas brutas de los genes NKG7 y PF4 en cada clúster, aplicando una transformación logarítmica para visualizar mejor las diferencias.
+
+```{r}
+# Mostrar cuentas brutas en escala logarítmica
+VlnPlot(pbmc, features = c("NKG7", "PF4"), slot = "counts", log = TRUE)
+```
+
+
+  -  `FeaturePlot()`: visualiza la expresión de características en un gráfico tSNE o PCA
+
+
+```{r}
+FeaturePlot(pbmc, features = c("MS4A1", "GNLY", "CD3E", "CD14", "FCER1A", "FCGR3A", "LYZ", "PPBP", "CD8A"))
+```
+
+Las áreas del gráfico donde estos genes se expresan con mayor intensidad estarán coloreadas de forma diferente, lo que te permitirá ver qué tipos de células están expresando esos genes.
+
+  -  `DoHeatmap()` genera un mapa de calor de expresión para las celdas y características dadas. 
+  
+En este caso, filtras los 10 principales genes (en términos de log fold-change) de cada clúster, con una expresión diferencial positiva (logFC > 1). Este paso te asegura que sólo estás visualizando los genes que tienen una expresión significativa y que se diferencian claramente entre los clústeres:
+
+  -  `group_by(cluster)`: Agrupa los datos por clúster.
+      
+  -  `filter(avg_log2FC > 1)`: Filtra los genes que tienen un log2 fold-change mayor a 1, es decir, aquellos genes que tienen una expresión al menos el doble de alta en el clúster en comparación con otras células.
+  
+  -  `slice_head(n = 10)`: Selecciona los 10 genes principales para cada clúster.
+  
+  -  `ungroup()`: Elimina la agrupación para que los datos filtrados puedan ser usados fácilmente en los siguientes pasos.
+
+```{r}
+pbmc.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 10) %>%
+    ungroup() -> top10
+
+DoHeatmap(pbmc, features = top10$gene) + NoLegend()
+```
+
+
+Más info: https://hbctraining.github.io/scRNA-seq/lessons/09_merged_SC_marker_identification.html
+
+
+# Asignación de identidad de tipo celular a grupo
+
+Afortunadamente, en el caso de este conjunto de datos, podemos usar marcadores canónicos para hacer coincidir fácilmente la agrupación imparcial con los tipos de células conocidos.
+
+En lugar de dejar los clústeres identificados solo por números, como 0, 1, 2, etc., ahora estamos renombrando estos clústeres con los nombres de tipos de células conocidos, basándonos en la expresión de marcadores específicos.
+
+**Identificación del clúster por marcadores:**
+
+Primero, observamos que cada clúster tiene un perfil de expresión genética particular. Usando marcadores canónicos (genes conocidos que son específicos de ciertos tipos de células), podemos asignar una identidad celular a cada clúster. Aquí está el mapeo que se está usando:
+
+  -  Clúster 0: Expresa los genes IL7R y CCR7, que son marcadores de células T CD4+ ingenuas (Naive CD4 T).
+
+  -  Clúster 1: Expresa CD14 y LYZ, característicos de monocitos CD14+.
+ 
+  -  etc.
+
+```{r}
+new.cluster.ids <- c("Naive CD4 T", "CD14+ Mono", "Memory CD4 T", "B", "CD8 T", "FCGR3A+ Mono", "NK", "DC", "Platelet")
+
+names(new.cluster.ids) <- levels(pbmc)  # Asignar los nuevos nombres a los niveles del objeto pbmc
+
+pbmc <- RenameIdents(pbmc, new.cluster.ids)  # Renombrar los identificadores de clúster en el objeto pbmc
+```
+
+Finalmente, se usa `DimPlot()` para visualizar los resultados en un gráfico de UMAP, con las células agrupadas por sus nuevos nombres de tipo celular. Además, activamos las etiquetas (`label = TRUE`) para que los nombres de los tipos de células aparezcan en el gráfico. La opción `pt.size = 0.5` ajusta el tamaño de los puntos, y `NoLegend()` oculta la leyenda, ya que las etiquetas de los clústeres están directamente en el gráfico.:
+
+```{r}
+DimPlot(pbmc, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
+```
+
+
+```{r}
+library(ggplot2)
+plot <- DimPlot(pbmc, reduction = "umap", label = TRUE, label.size = 4.5) + 
+  xlab("UMAP 1") + 
+  ylab("UMAP 2") +
+  theme(axis.title = element_text(size = 18), legend.text = element_text(size = 18)) + guides(colour = guide_legend(override.aes = list(size = 10)))
+
+# Guarda el gráfico en un archivo jpg
+ggsave(filename = "pbmc3k_umap.jpg", height = 7, width = 12, plot = plot, quality = 50)
+
+# Guardar el objeto pbmc en un archivo RDS.
+saveRDS(pbmc, file = "pbmc3k_final.rds")
+```
+
+

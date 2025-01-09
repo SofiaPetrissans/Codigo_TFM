@@ -1,0 +1,108 @@
+---
+title: "04_feature_selection"
+author: "Petrissans Moll, Sofia"
+date: "2024-10-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+########################################################################################################
+
+Identificación de características altamente variables (selección de características)
+
+########################################################################################################
+
+
+En el análisis de scRNA-seq, algunas características (genes) muestran una alta variación en su expresión entre diferentes células. Estos genes pueden ser expresados en alta cantidad en algunas células y en baja cantidad en otras.
+
+Concentrarse en estos genes altamente variables puede ayudar a captar mejor la heterogeneidad celular y las diferencias biológicas significativas dentro de los datos. Esto se debe a que estos genes tienden a estar más relacionados con los estados biológicos, las condiciones experimentales o los tipos celulares.
+
+La función `FindVariableFeatures` se utilizara para **identificar las caracterísitcas (genes) altamente variables** en un cojunto de datos. Modela directamente la relación entre la media y la varianza de los datos. Esto significa que se tiene en cuenta cómo la variabilidad de la expresión de un gen se relaciona con su nivel medio de expresión.
+
+Los argumentos de `FindVariableFeatures`:
+
+  -  `pbmc`
+  -  `selecion.method = "vst"`: especifica el método a utilizar para la selección de características. En este caso, "vst" se refiere a la transformación de varianza estabilizada, que es un método robusto para detectar genes que varían significativamente en la expresión.
+  -  `nfeatures = 2000`: se devolveran los 2000 genes más variables para su anñalisis posterior, como puede ser el PCA
+  
+Después de ejecutar la función `FindVariableFeatures()`, que identifica las características altamente variables en un objeto Seurat, puedes utilizar `VariableFeatures()` para acceder a estas características en un formato más accesible.
+
+Para **visualizar las características variables** se utiliza `VariableFeaturePlot()`. Este gráfico muestra la variación en la expresión de los genes identificados.
+
+Y para resaltar los 10 genes más variables en el gráfico, se utiliza `LabelPoints()` para agregar etiquetas a estos genes.
+
+```{r}
+pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(pbmc), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(pbmc)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+
+plot1 + plot2
+```
+
+SELECCIÓN AUTOMÁTICA DE LOS HVG
+
+```{r}
+# Calcular la varianza para un rango amplio de genes variables
+pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = 5000)
+# Extraer la varianza estandarizada de cada gen:
+variable_genes <- pbmc[["RNA"]]@meta.features[["vst.variance.standardized"]]
+
+# Determinar el punto de codo usando el porcentaje acumulado de varianza
+cumulative_var <- cumsum(sort(variable_genes, decreasing = TRUE))
+optimal_hvg <- which(cumulative_var / max(cumulative_var) > 0.90)[1]  # Ajuste al 90% de la varianza
+optimal_hvg
+
+# Usar el número óptimo de HVG encontrados
+pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = optimal_hvg)
+
+```
+
+
+## Escalando los datos
+
+A continuación, aplicamos una transformación lineal (ecscalamiento) que es un paso de preprocesamiento estándar previo a las técnicas de reducción dimensional como el PCA. Este preprocesamiento asegura que todos los genes contribuyan de manera equitativa al análisis posterior, evitando que genes con una alta expresión dominen los resultados.
+
+La función `ScaleData()`:
+
+  -  Cambia la expresión de cada gen, de modo que la expresión media en las células sea 0
+  
+  -  Escala la expresión de cada gen, de modo que la varianza entre células sea 1
+        - Este paso otorga el mismo peso en los análisis posteriores, de modo que los genes altamente expresados no dominen.
+        
+  -  **Los resultados de esto se almacenan en pbmc[["RNA"]]$scale.data**
+  
+  -  De forma predeterminada, solo se escalan las características variables.
+
+  -  Por defecto, `ScaleData()` solo escala las características (genes) que han sido identificadas como altamente variables en pasos anteriores. Sin embargo, puedes especificar un conjunto diferente de genes a escalar utilizando el argumento `features`
+  
+```{r}
+# Obtenemos todos los nombres de los genes
+all.genes <- rownames(pbmc)
+
+# Escalar los datos de expresión para todos los genes 
+pbmc <- ScaleData(pbmc, features = all.genes)
+```
+
+## Eliminación de Fuentes de Variación no deseadas.
+
+En el análisis de datos de expresión génica a nivel de célula única, es común encontrar variaciones en los datos que no se deben a diferencias biológicas reales entre las células. Por ejemplo, las células pueden mostrar variaciones relacionadas con la contaminación mitondrial.
+
+La función `ScaleData()` permite corregir estas variaciones no deseadas a través del parámetro `vars.to.regress`. Cuando se especifica una variable en este argumento, la función ajusta los datos de expresión de modo que esta fuente de variación se elimine antes de proceder con el análisis.
+
+```{r}
+# Regresion del porcentaje de ARN mitocondrial
+pbmc <- ScaleData(pbmc, vars.to.regress = "percent.mt")
+```
+
+`vars.to.regress` en este caso, estás regresando el porcentaje de ARN mitocondrial (percent.mt). La función ajusta las mediciones de expresión génica para eliminar la variación debida a esta variable antes de escalar los datos.
+
+Para los usuarios avanzados, Seurat recomienda el uso de `SCTransform()` en lugar de ScaleData() para la normalización y eliminación de fuentes de variación no deseadas.

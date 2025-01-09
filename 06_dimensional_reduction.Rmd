@@ -1,0 +1,201 @@
+---
+title: "06_dimensional_reduction"
+author: "Petrissans Moll, Sofia"
+date: "2024-10-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+########################################################################################################
+
+Realizar reducción dimensional lineal
+
+########################################################################################################
+
+ 
+A continuación, realizamos el **análisis de componentes principales** (PCA) sobre los datos escalados. De manera predeterminada, solo se utilizan como entrada las características de las variables determinadas previamente, pero se pueden definir mediante el argumento `features` si desea elegir un subconjunto diferente (si desea utilizar un subconjunto personalizado de características, asegúrese de pasarlas ScaleDataprimero).
+
+Para los primeros componentes principales, Seurat **genera una lista de genes con las cargas más positivas y negativas, que representan módulos de genes que exhiben correlación (o anticorrelación) entre células individuales en el conjunto de datos.**
+
+La función `RunPCA` ejecuta el PCA en el objecto `pbmc`.
+
+  -  `features = VariableFeatures(object = pbmc)`: Aquí se especifican las características (genes) que se utilizarán para el PCA. En este caso, se están usando los **genes con alta variabilidad que se identificaron previamente utilizando** `FindVariableFeatures()`. Esto es crucial porque los genes altamente variables son más informativos para el análisis.
+
+```{r}
+pbmc <- RunPCA(pbmc, features = VariableFeatures(object = pbmc))
+```
+
+Después de realizar el PCA podemos **explorar los resultados** de varias maneras.
+
+En este caso vamos a imprimir por pantalla los genes que tienen las mayores cargas positivas y negativas en cada uno de los primero cinco **componentes principales**. 
+
+Para ello accedemos al objeto `"pca"` almacenado en el objecto `pbmc`. Con `dims = 1:5` se están mostrando los resultados para los primeros cinco componentes principales. Y con el argumento `nfeatures = 5` muestra los cinco genes con las cargas más altas y bajas para cada componente principal.
+
+```{r}
+print(pbmc[["pca"]], dims = 1:5, nfeatures = 5)
+```
+
+Si se observa el PC_1 se puede ver que las células con alta expresión de CST3, TYROBP, LST1, AIF1, y FTL se agruparán juntas en el espacio de PCA, mientras que las células con alta expresión de MALAT1, LTB, IL32, IL7R, y CD2 se agruparán en el extremo opuesto del componente.
+
+Este patrón se repite para los otros componentes principales, proporcionando información sobre qué genes están correlacionados o anticorrelacionados entre las células en el conjunto de datos.
+
+La función `VizDimLoading` permite visualizar las cargas de las dimensiones en un gráfico de barras o dispersión. 
+
+  -  `dims = 1:2` indica que se están visualizando las cargas de los dos primeros componentes principales.
+  
+  -  `reduction = "pca"` especifica que se están utilizando los resultados del PCA.
+
+```{r}
+VizDimLoadings(pbmc, dims = 1:2, reduction = "pca")
+```
+
+
+La visualización resultante muestra qué genes contribuyen más a los primeros dos componentes principales, facilitando la interpretación de los resultados del PCA. Los genes con altas cargas (tanto positivas como negativas) en cada componente son indicativos de las características que diferencian a las células en el espacio reducido.
+
+Otra función comúnmente utilizada es `DimPlot`, que visualiza las células en el espacio de los componentes principales:
+
+```{r}
+DimPlot(pbmc, reduction = "pca")
+```
+
+Cada punto representa una célula y su posición en el gráfico refleja sus características basadas en las dimensiones del PCA.
+
+La función `DimHeatmap()` permite una exploración sencilla de las fuentes primarias de heterogeneidad en un conjunto de datos y puede ser útil cuando se intenta decidir qué PC incluir para análisis posteriores. 
+
+Los argumentos de esta función son:
+   
+  -  `pbmc`
+  
+  -  `dims = 1`: aquí, estás pidiendo que se visualice el primer componente principal (PC1). Esto mostrará qué genes están más correlacionados o anticorrelacionados en relación con el PC1. 
+  
+  -  `cells = 500`: indica cuántas células deseas incluir en el mapa de calor. En este caso, se seleccionan 500 células extremas, lo que significa que se seleccionan las células que están en los extremos del espectro del PC1. Permite enfocarse en las células más importantes de este PC. 
+  
+  -  `balanced = TRUE`: balancea el número de células tomadas de cada extremo del componente principal. Es decir, selecciona células tanto del extremo positivo como del negativo del espectro del PC.
+
+```{r}
+DimHeatmap(pbmc, dims = 1, cells = 500, balanced = TRUE)
+```
+
+1. Ejes del gráfico:
+
+  -  Filas: Representan los genes más correlacionados con el primer componente principal (PC_1). Los genes mostrados son aquellos que más contribuyen a la variabilidad capturada por PC_1.
+
+  -  Columnas: Representan las células individuales. Cada columna es una célula y está ordenada según su puntuación en el PC_1.
+
+2. Colores: Los colores representan los niveles de expresión de los genes en las células.
+
+  -  Amarillo indica una alta expresión del gen en esa célula.
+
+  -  Morado indica una baja expresión o ausencia de expresión de ese gen en esa célula.
+
+  -  Los colores intermedios indican niveles de expresión intermedios.
+
+3. Interpretación de patrones: Las células están ordenadas en función de su puntuación en PC_1. Esto significa que las columnas (células) más hacia la izquierda tienen puntuaciones negativas o bajas en PC_1, mientras que las columnas hacia la derecha tienen puntuaciones más positivas o altas.
+
+  -  Los patrones verticales en el gráfico sugieren que ciertos genes se expresan en grupos de células específicas. Por ejemplo, los genes que se expresan más en las células a la izquierda del gráfico (amarillo en la parte superior izquierda) tienen una alta correlación negativa con PC_1.
+
+  -  Los genes que tienen alta expresión (amarillo) en las células a la derecha del gráfico y baja expresión (morado) en las células de la izquierda tienen una alta correlación positiva con PC_1.
+
+Por ejemplo:
+
+  -  LTB, IL7R, B2M, CD27: Estos genes se expresan más en las células a la derecha del gráfico (color amarillo) y menos en las células de la izquierda (color morado).
+
+  -  S100A9, LYZ, FTL, CST3: Estos genes tienen una expresión más alta en las células a la izquierda y más baja en las células a la derecha.
+  
+
+También se pueden visualizar más de un PC en el mismo gráfico:
+
+```{r}
+DimHeatmap(pbmc, dims = 1:15, cells = 500, balanced = TRUE)
+```
+
+
+# Determinar la 'dimensionalidad' del conjunto de datos
+
+Para superar el ruido técnico extenso en cualquier característica individual para los datos de scRNA-seq, Seurat agrupa las células en función de sus puntuaciones de PCA, donde cada PC representa esencialmente una "metacaracterística" que combina información a través de un conjunto de características correlacionadas. Por lo tanto, los componentes principales superiores representan una compresión robusta del conjunto de datos. Sin embargo, ¿cuántos componentes deberíamos elegir incluir? ¿10? ¿20? ¿100?
+
+Un método heurístico es genera un "diagrama de codo": una clasificación de los componentes principales en función del porcentaje de varianza explicado por cada uno (función `ElbowPlot()`). En este ejemplo, podemos observar un "codo" alrededor de PC9-10, lo que sugiere que la mayoría de la señal verdadera se captura en los primeros 10 PC.
+
+```{r}
+ElbowPlot(pbmc)
+```
+  
+En este ejemplo, podría haber estado justificado elegir cualquier valor entre PC 7 y 12 como punto de corte.
+
+El gráfico de codo es útil para determinar cuántos PC necesitamos para capturar la mayor parte de la variación en los datos. El gráfico de codo visualiza la desviación estándar de cada PC. El lugar donde aparece el codo suele ser el umbral para identificar la mayor parte de la variación. Sin embargo, **este método puede ser un poco subjetivo en cuanto a la ubicación del codo.**
+
+Si bien esto nos da una buena idea aproximada de la cantidad de PC que se deben incluir, un **enfoque más cuantitativo** puede ser un poco más confiable. Podemos calcular dónde comienzan a formar un codo los componentes principales tomando **el valor más grande de** :
+
+-  El punto donde los componentes principales solo contribuyen con el 5% de la desviación estándar y los componentes principales contribuyen acumulativamente con el 90% de la desviación estándar.
+
+-  El punto donde el cambio porcentual en la variación entre las PC consecutivas es menor al 0,1%.
+
+
+Comenzaremos calculando la primera métrica:
+
+```{r}
+# Determine percent of variation associated with each PC
+pct <- pbmc[["pca"]]@stdev / sum(pbmc[["pca"]]@stdev) * 100
+
+# Calculate cumulative percents for each PC
+cumu <- cumsum(pct)
+
+# Determine which PC exhibits cumulative percent greater than 90% and % variation associated with the PC as less than 5
+co1 <- which(cumu > 90 & pct < 5)[1]
+
+co1
+```
+
+La primera métrica devuelve PC44 como el PC que cumple con estos requisitos. 
+
+Veamos la segunda métrica, que identifica el PC en el que el cambio porcentual en la variación entre PC consecutivos es inferior al 0,1 %:
+
+```{r}
+# Determine the difference between variation of PC and subsequent PC
+co2 <- sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+
+# last point where change of % of variation is more than 0.1%.
+co2
+```
+Esta segunda métrica devuelve el PC8. Por lo general, elegiríamos el mínimo de estas dos métricas como los PC que cubren la mayor parte de la variación en los datos.
+
+```{r}
+# Minimum of the two calculation
+pcs <- min(co1, co2)
+
+pcs
+```
+
+
+En base a estas métricas, para la agrupación de celdas en Seurat utilizaremos las primeras **ocho** PC para generar los clústeres. Podemos trazar nuevamente el gráfico de codo y superponer la información determinada mediante nuestras métricas:
+
+Por lo tanto, la interpretación de co1 y co2:
+-  co1 es el número de PCs necesarios para capturar al menos el 90% de la varianza, excluyendo PCs con baja varianza individual.
+
+-  co2 es el último PC antes de que la reducción de varianza sea menor a 0.1%, sugiriendo un "codo" en la gráfica.
+
+
+```{r}
+# Create a dataframe with values
+plot_df <- data.frame(pct = pct, 
+           cumu = cumu, 
+           rank = 1:length(pct))
+
+# Elbow plot to visualize 
+  ggplot(plot_df, aes(cumu, pct, label = rank, color = rank > pcs)) + 
+  geom_text() + 
+  geom_vline(xintercept = 90, color = "grey") + 
+  geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  theme_bw()
+ 
+```
+
+
+
+
+
+
+

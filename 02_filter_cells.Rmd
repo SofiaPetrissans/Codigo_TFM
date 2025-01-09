@@ -1,0 +1,228 @@
+---
+title: "0.2 filter_cells"
+author: "Petrissans Moll, Sofia"
+date: "2024-10-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+![flujo_de_trabajo](flujo_de_trabajo.png)
+
+# Flujo de trabajo de **pre**procesamiento estándar
+
+Preprocesamiento estándar para datos de scRNA-seq en Seurat. Estos representan la **selección** y el **FILTRADO DE CÉLULAS** en función de métricas de control de calidad, la **normalización** y el **escalamiento de datos**, y la **detección de características altamente variables**.
+
+########################################################################################################
+
+Control de calidad y selección de células para análisis posteriores
+
+########################################################################################################
+
+**Objetivos:**
+
+-  Para filtrar los datos para incluir solo células verdaderas que sean de alta calidad , de modo que cuando agrupemos nuestras células sea más fácil identificar poblaciones de tipos de células distintos.
+
+-  Identificar cualquier muestra fallida y tratar de recuperar los datos o eliminarlos del análisis, además de tratar de comprender por qué falló la muestra.
+
+**Desafíos:**
+
+-  Diferenciar las células de mala calidad de las células menos complejas
+
+-  Elegir umbrales de filtrado adecuados, de modo de mantener células de alta calidad sin eliminar tipos de células biológicamente relevantes
+
+**Recomendaciones:**
+
+-  Tenga una idea clara de sus expectativas sobre los tipos de células presentes antes de realizar el control de calidad. Por ejemplo, ¿espera tener células de baja complejidad o células con niveles más altos de expresión mitocondrial en su muestra? 
+
+```{r}
+# Explorar metadatos
+head(pbmc@meta.data, 5)
+```
+
+Las columnas incluyen:
+
+-  `orgi.ident`: a menudo contiene la identidad de la muestra si se conoce.
+
+-  `nCount_RNA`: número de UMI por celda (nUMI)
+
+-  `nFeature_RNA`: número de genes detectados por célula (nGene)
+
+
+Algunas métricas de control de calidad que utiliza habitualmente la comunidad incluyen:
+
+  -  El **número de genes únicos detectados en cada célula**.
+        - Las células de baja calidad o las gotitas vacías a menudo tendrán muy pocos genes.
+        - Los dobletes o multipletes de células pueden presentar un recuento genético aberrantemente alto
+  -  De manera similar, el **número total de moléculas detectadas dentro de una célula** (se correlaciona fuertemente con genes únicos)
+  -  El **porcentaje de lecturas que corresponden al genoma mitocondria**
+        - Las células de baja calidad o moribundas a menudo presentan una extensa contaminación mitocondrial.
+        - Calculamos métricas de control de calidad mitocondrial con la función `PercentageFeatureSet()`, que calcula el porcentaje de recuentos que se originan a partir de un conjunto de características.
+        - Utilizamos el conjunto de todos los genes comenzando con MT-como un conjunto de genes mitocondriales.
+        
+
+A continuación se calcular el porcentaje del ARN mitocondrial para cada célula. Para ello se crea una nueva columna de metadatos con el uso de `[[]]`, en este caso, esta nueva columna se llama 'percent.mt'. 
+
+Con la función `PercentageFeutureSet()` podemos calcular el % de ciertas características. Los argumentos de esta función son `pbmc` que es nuestro objeto Seurat y `pattern = "^MT-"` donde `^MT-` siginifica que buscará características cuyos nombres comientcen con MT-, que es el prefijo que se usa para los genes mitoconrdriales.
+
+```{r}
+# The [[ operator can add columns to object metadata. This is a great place to stash QC stats
+pbmc[["percent.mt"]] <- PercentageFeatureSet(pbmc, pattern = "^MT-")
+
+head(pbmc@meta.data, 5)
+```
+
+
+También calcularé el número de genes detectados por UMI: esta métrica nos da una idea de la complejidad de nuestro conjunto de datos.
+
+```{r}
+pbmc[["log10GenesPerUMI"]] <- log10(pbmc@meta.data$nFeature_RNA) / log10(pbmc@meta.data$nCount_RNA)
+
+head(pbmc@meta.data, 5)
+```
+
+
+
+En el siguiente ejemplo, visualizamos métricas de control de calidad y las usamos para filtrar celdas.
+
+-  __Filtramos celdas que tienen recuentos de características únicas superiores a 2500 o inferiores a 200.__ Un número bajo de características puede indicar que la célula no tiene suficiente información, mientras que un número muy alto puede sugerir células que han sido sobre muestreadas o son contaminantes.
+
+-  __Filtramos células que tienen recuentos mitocondriales >5%.__ Un alto porcentaje de ARN mitocondrial puede indicar estrés celular o muerte, lo que podría comprometer la calidad de los datos.
+
+
+Para **visulaizar** las metricas del control de calidad usamos la función `VlnPlot()` que genera gráficos de violin que muestran la distribución de las métricas seleccionadsa. 
+
+Los argumentos de `VlnPlot()` son:
+
+  -  `pbmc`: nuestro objeto Seurat
+  -  `features = c("nFeature_RNA", "nCount_RNA", "percent.mt")`: se especifican las métricas que se quieren visualizar. En este caso el número de caracterísitas (genes) detectados en cada célula; el recuento total de moléculas de RNA por célula; porcentaje de RNA que proviene de genes mitoconriales.
+  -  `ncol = 3`: mostrar los gráficos en una fila con 3 columnas.
+
+```{r}
+# Visualize QC metrics as a violin plot
+VlnPlot(pbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+La forma del gráfico de violín muestra la distribución de cada métrica entre las células, con los puntos negros que representan los datos individuales de cada célula.
+
+Las áreas más anchas del violín indican un mayor número de células en ese rango específico de valores, mientras que las áreas estrechas indican menos células.
+
+
+Para **visualizar relaciones entre caracterísitcas** se utilizan los gráficos de dispersión (scatter plot) usando la función de Seurat `FeatureScatter()`. 
+
+  -  `plot1`: muestra como el recuento total de RNA se relaciona con el pocentaje de de RNA mitocondial. Una relación inusual aquí podría indicar problemas en la calidad de la célula.
+  
+  -  `plot2`: muestra la relación entre el recuento total de ARN y el número de características detectadas. Esto es útil para identificar células con recuentos anómalos.
+  
+
+```{r}
+# FeatureScatter is typically used to visualize feature-feature relationships, but can be used
+# for anything calculated by the object, i.e. columns in object metadata, PC scores etc.
+
+plot1 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "percent.mt")
+
+plot2 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+plot1 + plot2
+```
+
+
+**Recuentos de UMI por célula**
+Los recuentos de UMI por célula deberían ser, en general, superiores a 500, que es el límite inferior de lo que esperamos. Si los recuentos de UMI están entre 500 y 1000, es utilizable, pero probablemente las células deberían haberse secuenciado con mayor profundidad.
+
+```{r}
+library(ggplot2)
+
+# Create metadata dataframe
+metadata <- pbmc@meta.data
+
+# Visualize the number UMIs/transcripts per cell
+metadata %>% 
+  	ggplot(aes(x=nCount_RNA)) +
+  	geom_density(alpha = 0.2) + 
+  	scale_x_log10() + 
+  	theme_classic() +
+  	ylab("log10 cell density") +
+  	geom_vline(xintercept = 500)
+```
+
+Podemos ver que la mayoría de nuestras células en ambas muestras tienen 2000 UMI o más, lo cual es genial.
+
+
+**Genes detectados por células**
+
+Tenemos expectativas similares para la detección de genes y para la detección de UMI, aunque puede ser un poco más baja que la de los UMI. Para datos de alta calidad, el histograma proporcional debe contener un único pico grande que represente las células que fueron encapsuladas
+
+```{r}
+# Visualize the distribution of genes detected per cell via histogram
+metadata %>% 
+  	ggplot(aes(x=nFeature_RNA)) + 
+  	geom_density(alpha = 0.2) + 
+  	theme_classic() +
+  	scale_x_log10() + 
+  	geom_vline(xintercept = 300)
+```
+
+**UMIs vs Genes detectados**
+
+-  Cantidad de UMI: Refleja el número total de moléculas de ARN capturadas en una célula, contabilizando cada transcrito individual marcado con un UMI. Representa la profundidad de secuenciación.
+
+-  Cantidad de genes detectados: Representa el número de genes únicos expresados en una célula, sin importar cuántos transcritos hay de cada uno.
+
+Dos métricas que a menudo se evalúan juntas son la cantidad de UMI y la cantidad de genes detectados por célula. Aquí, hemos representado gráficamente la cantidad de genes frente a la cantidad de UMI coloreadas por la fracción de lecturas mitocondriales .
+
+```{r}
+# Visualize the correlation between genes detected and number of UMIs and determine whether strong presence of cells with low numbers of genes/UMIs
+metadata %>% 
+  	ggplot(aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt)) + 
+  	geom_point() + 
+	scale_colour_gradient(low = "gray90", high = "black") +
+  	stat_smooth(method=lm) +
+  	scale_x_log10() + 
+  	scale_y_log10() + 
+  	theme_classic() +
+  	geom_vline(xintercept = 500) +
+  	geom_hline(yintercept = 250) 
+```
+
+
+**Complejidad**
+
+Podemos ver que las muestras en las que secuenciamos menos cada célula tienen una complejidad general más alta, esto se debe a que no hemos comenzado a saturar la secuenciación de ningún gen determinado para estas muestras. Las células atípicas en estas muestras pueden ser células que tienen una especie de ARN menos compleja que otras células. A veces, podemos detectar la contaminación con tipos de células de baja complejidad , como los glóbulos rojos, a través de esta métrica. En general, esperamos que la puntuación de novedad sea superior a 0,80.
+
+```{r}
+# Visualize the overall complexity of the gene expression by visualizing the genes detected per UMI
+metadata %>%
+  	ggplot(aes(x=log10GenesPerUMI)) +
+  	geom_density(alpha = 0.2) +
+  	theme_classic() +
+  	geom_vline(xintercept = 0.8)
+```
+
+
+
+########################################################################################################
+
+F I L T R A D O
+
+########################################################################################################
+
+
+
+Realizamos el **filtrado de células**. Se usa la función `subset()` para ello. 
+
+En este caso,  se incluyen solo:
+  -  las células que tienen más de 200 características únicas detectadas; 
+  -  las células que tienen menos de 2500 características (si presentan más podrían indicar que estan sobrmuestreadas o contamindas); 
+  -  las células con menos de 5% de RNA mitorcondial.
+  -  las células que tienen más de 500 UMIs.
+  -  logGensPerUMI > 0.8
+  
+Como resultrado tendremos un nuevo objeto Seurat (pbmc) que solo incluye las células que cumplen con todos los criterios de calidad especificados.
+
+```{r}
+pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5 & nCount_RNA > 500)
+```
+

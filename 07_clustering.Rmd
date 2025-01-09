@@ -1,0 +1,111 @@
+---
+title: "07_clustering"
+author: "Petrissans Moll, Sofia"
+date: "2024-10-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+########################################################################################################
+
+Agrupar las células
+
+########################################################################################################
+
+
+Se trata de un paso fundamental para **identificar subpoblaciones celulares basadas en sus perfiles de expresión génica.**
+
+El agrupamiento (o "clustering") es una técnica que tiene como objetivo **dividir las células en grupos o clústeres que comparten patrones similares de expresión génica**. Estas subpoblaciones pueden reflejar diferentes tipos o estados celulares.
+
+**PROCESO DE AGRUPAMIENTO EN SEURAT**:
+
+1.  Construcción de un gráfico de vecinos más cercanos (KNN):
+
+  -  Se basa en las componentes principales (PC) obtenidas del PCA: Las primeras componentes principales son seleccionadas (en este caso, las primeras 10) porque representan la mayor parte de la variabilidad en los datos.
+  
+  -  Se construye un gráfico KNN (K-nearest neighbors, o K vecinos más cercanos) que conecta las células que tienen perfiles de expresión similares.
+El gráfico se refina utilizando la similitud de Jaccard, que mide la superposición entre los vecindarios de las células para ajustar los pesos de los bordes en el gráfico.
+
+  -  **Este paso se implementa usando la función** `FindNeighbors()`, que genera un gráfico donde las células se conectan si están cerca en el espacio de expresión génica (definido por las componentes principales).
+  
+2.  Aplicación de un algoritmo de agrupamiento basado en grafos:
+
+  -  Seurat utiliza algoritmos de agrupamiento como el algoritmo de Louvain o SLM para particionar el gráfico KNN.
+  
+  -  Estos algoritmos buscan maximizar la "modularidad", que mide cuán bien están conectadas las células dentro de los grupos (comunidades) comparadas con lo esperado al azar.
+  
+  -  El algoritmo identifica células que forman comunidades altamente interconectadas, donde las células dentro de un mismo grupo tienen perfiles de expresión génica más similares entre sí que con las células de otros grupos.
+
+  -  **Este paso se realiza con la función** `FindClusters()`.
+
+3.  Parámetro de resolución:
+
+  -  En la función `FindClusters()`, el parámetro de `resolution` controla el nivel de granularidad del agrupamiento.
+
+      -  Valores más bajos (como 0.4) crean menos grupos, pero cada uno será más general.
+
+      -  Valores más altos (como 1.2) generan más grupos con un nivel de separación más fino entre subpoblaciones.
+
+      Por ejemplo, para conjuntos de datos con alrededor de 3000 células, valores de resolución entre 0.4 y 1.2 funcionan bien. 
+      Sin embargo, para conjuntos de datos más grandes, puede ser necesario ajustar la resolución a valores más altos.
+
+4.  Visualización de los resultados:
+
+  -  Una vez realizado el agrupamiento, las células se etiquetan con un identificador de clúster, que se puede inspeccionar usando la función `Idents()`. En este caso, el resultado muestra los IDs de los primeros 5 clústeres y a qué grupo pertenece cada célula.
+  
+
+```{r}
+pbmc <- FindNeighbors(pbmc, dims = 1:10)
+pbmc <- FindClusters(pbmc, resolution = 0.5)
+```
+
+La salida muestra:
+
+  -  El número de nodos, que en este caso son las 2638 células.
+  
+  -  El número de bordes o conexiones entre las células basado en la similitud en sus perfiles de expresión.
+
+  -  El número de comunidades o clústeres resultantes, que es 9 en este caso.
+  
+
+```{r}
+head(Idents(pbmc), 5)  # Muestra los IDs de clúster de las primeras 5 células
+```
+
+Esto indica que la primera célula pertenece al clúster 2, la segunda célula al clúster 3, la tercera de nuevo al clúster 2, etc.
+
+
+# Ejecutar reducción dimensional no lineal (UMAP/tSNE)
+
+Seurat ofrece varias técnicas de reducción dimensional no lineal, como tSNE y UMAP, para visualizar y explorar estos conjuntos de datos. El objetivo de estos algoritmos es aprender la estructura subyacente en el conjunto de datos, con el fin de **colocar células similares juntas en un espacio de baja dimensión**. Por lo tanto, las células que se agrupan dentro de los clústeres basados en gráficos determinados anteriormente deberían co-localizarse en estos gráficos de reducción dimensional.
+
+Estos métodos tienen como objetivo preservar las distancias locales en el conjunto de datos (es decir, garantizar que las células con perfiles de expresión genética muy similares se localicen conjuntamente), pero a menudo no preservan relaciones más globales. Alentamos a los usuarios a aprovechar técnicas como UMAP para la visualización, pero a evitar sacar conclusiones biológicas basándose únicamente en técnicas de visualización.
+
+  -  **tSNE** (t-distributed Stochastic Neighbor Embedding): Se enfoca en preservar las distancias locales entre puntos cercanos, es decir, asegura que las células que son muy similares en el espacio de alta dimensión permanezcan juntas en el espacio reducido. Sin embargo, no mantiene bien las relaciones globales entre diferentes clústeres.
+
+  -  **UMAP** (Uniform Manifold Approximation and Projection): Es similar a tSNE en su capacidad de preservar las relaciones locales, pero UMAP también mantiene mejor las relaciones globales entre los grupos de células, y su rendimiento es más eficiente en términos computacionales.
+
+## Proceso de reducción dimensional con UMAP:
+
+`RunUMAP(pbmc, dims = 1:10)`: Esta línea aplica UMAP para reducir las dimensiones de los datos basándose en las 10 primeras componentes principales (PCs) del análisis PCA. Al reducir a 2 dimensiones, UMAP crea una representación en la que las células con perfiles de expresión similares deberían agruparse visualmente.
+
+`DimPlot(pbmc, reduction = "umap")`: Genera un gráfico que visualiza el resultado del UMAP, donde las células se agrupan según sus perfiles de expresión génica. En este gráfico, los puntos representan células, y las que tienen una expresión similar se colocan cerca unas de otras. Esto ayuda a visualizar la estructura subyacente de las células y observar los clústeres previamente identificados con los métodos de agrupamiento.
+
+```{r}
+pbmc <- RunUMAP(pbmc, dims = 1:10)  # Ejecutar UMAP basado en las 10 primeras componentes principales
+DimPlot(pbmc, reduction = "umap", label = TRUE, label.size = 4)  # Visualizar los resultados con un gráfico UMAP
+```
+
+
+Puede guardar el objeto en este punto para poder volver a cargarlo fácilmente sin tener que volver a ejecutar los pasos computacionalmente intensivos realizados anteriormente, o compartirlo fácilmente con colaboradores.
+
+```{r}
+# Guardar el archivo en el directorio actual
+saveRDS(pbmc, file = "pbmc_tutorial.rds")
+```
+
+Esto guarda el objeto pbmc como un archivo .rds, que puede ser fácilmente recargado más tarde con `readRDS()` sin necesidad de recalcular todos los pasos anteriores.
+
