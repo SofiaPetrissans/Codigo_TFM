@@ -1,1 +1,8 @@
-# Codigo_TFM
+# Codigo TFM
+
+1. Introducción
+La obesidad se ha convertido en una de las epidemias más críticas del siglo XXI, afectando a millones de personas en todo el mundo y siendo un factor de riesgo para enfermedades cardiovasculares, diabetes y cáncer. Según la OMS, más del 16% de los adultos padecen obesidad, lo que refleja la magnitud del problema. El tejido adiposo, que antes se consideraba un mero almacén energético, es ahora reconocido como un órgano dinámico con funciones endocrinas e inmunitarias fundamentales. Dentro de este tejido, el endotelio vascular desempeña un papel esencial en la homeostasis, mediando procesos como la angiogénesis y la interacción con los adipocitos.
+Para entender mejor estos procesos, utilizamos la secuenciación de ARN de célula única (scRNA-seq), una tecnología que permite estudiar la heterogeneidad celular con una resolución sin precedentes, especialmente en tejidos complejos como el tejido adiposo. Este estudio aborda cómo las condiciones dietéticas y genotípicas afectan a las subpoblaciones endoteliales, con el objetivo de explorar su papel en la remodelación vascular inducida por el estrés metabólico.
+
+3.  Métodos
+En cuanto al análisis bioinformático, comenzamos con un riguroso preprocesamiento de los datos, que incluyó filtrado de calidad y normalización. Para identificar las subpoblaciones, recurrimos a marcadores específicos que distinguieron arterias, venas y capilares. Utilizamos herramientas como Seurat para el análisis de scRNA-seq, ROGUE para evaluar la heterogeneidad celular y scProportionTest para comparar las proporciones celulares entre las distintas condiciones experimentales.
